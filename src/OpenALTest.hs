@@ -12,46 +12,43 @@ import qualified Pipes.Prelude as PP
 import qualified Pipes.ByteString as PB
 import qualified Control.Monad.State.Strict as ST
 import Control.Monad
+import qualified Control.Concurrent as C
 
-toOgg :: P.Pipe BS.ByteString BS.ByteString IO ()
-toOgg =  P.for P.cat (\bs -> do
+newtype OAByteString = OAByteString BS.ByteString
+newtype OggByteString = OggByteString BS.ByteString
+
+toOgg :: P.Pipe OAByteString OggByteString IO ()
+toOgg =  P.for P.cat (\(OAByteString bs) -> do
 	(i,o,e,pHandle) <- P.liftIO $ runInteractiveCommand "sox -t raw -c 2 -r 44100 -e signed-integer -L -b 16 - -t ogg -"
 	P.liftIO $ BS.hPut i bs
 	P.liftIO $ hClose i
 	oBs <- P.liftIO $ BS.hGetContents o
-	P.yield oBs)
+	P.yield $ OggByteString oBs)
 
-fromOgg :: P.Pipe BS.ByteString BS.ByteString IO ()
-fromOgg = P.for P.cat (\bs -> do
-	(i,o,e,pHandle) <- P.liftIO $ runInteractiveCommand "sox -t ogg - -t raw -c 1 -r 16000 -e signed-integer -L -b 16 -"
+fromOgg :: P.Pipe OggByteString OAByteString IO ()
+fromOgg = P.for P.cat (\(OggByteString bs) -> do
+	(i,o,e,pHandle) <- P.liftIO $ runInteractiveCommand "sox -t ogg - -t raw -c 2 -r 44100 -e signed-integer -L -b 16 -"
 	P.liftIO $ BS.hPut i bs
 	P.liftIO $ hClose i
 	oBs <- P.liftIO $ BS.hGetContents o
-	P.yield oBs)
+	P.yield $ OAByteString oBs)
 	
-fromPA :: P.Producer BS.ByteString IO ()
+fromPA :: P.Producer OAByteString IO ()
 fromPA = do
+	P.liftIO $ C.forkOS $ system "pulseaudio" >> return ()
+	P.liftIO $ C.threadDelay 30000
 	(i,o,e,h) <- P.liftIO $ runInteractiveCommand "parec --device=drain.monitor --format=s16le --rate=44100 --channels=2"
 	P.liftIO $ hClose i
-	PB.fromHandle o 
+	P.for (PB.fromHandle o) (\bs -> P.yield $ OAByteString bs)
 
-alFormatPipe :: P.Pipe BS.ByteString BS.ByteString IO ()
+alFormatPipe :: P.Pipe BS.ByteString OAByteString IO ()
 alFormatPipe =  P.for P.cat (\bs -> do
 	(i,o,e,pHandle) <- P.liftIO $ runInteractiveCommand "sox -t raw -c 1 -r 16000 -e floating-point -L -b 32 - -t raw -c 1 -r 16000 -e signed-integer -L -b 16 -"
 	P.liftIO $ BS.hPut i bs
 	P.liftIO $ hFlush i
 	P.liftIO $ hClose i
 	oBs <- P.liftIO $ BS.hGetContents o
-	P.yield oBs)
-
-otherALFormat :: P.Pipe BS.ByteString BS.ByteString IO ()
-otherALFormat = P.for P.cat (\bs -> do
-	(i,o,e,pHandle) <- P.liftIO $ runInteractiveCommand "sox -t raw -c 2 -r 44100 -e signed-integer -L -b 16 - -t raw -c 1 -r 16000 -e signed-integer -L -b 16 -"
-	P.liftIO $ BS.hPut i bs
-	P.liftIO $ hFlush i
-	P.liftIO $ hClose i
-	oBs <- P.liftIO $ BS.hGetContents o
-	P.yield oBs)
+	P.yield $ OAByteString oBs)
 
 getALReady :: IO ()
 getALReady = do
@@ -59,22 +56,28 @@ getALReady = do
 	context d
 	return ()
 
-alConsumer :: Source -> P.Consumer' BS.ByteString IO ()
-alConsumer s = P.for P.cat (\bs -> do
-	ss <- P.liftIO $ get $ sourceState s
-	b <- P.liftIO $ buff bs
-	P.liftIO $ queueBuffers s [b]
-	case ss of
-		Initial -> 	P.liftIO $ play [s]	
-		_ -> P.liftIO $ freeMemory s)
+alConsumer :: Source -> P.Consumer OAByteString IO ()
+alConsumer s = flip ST.evalStateT [] $ forever $ do 
+		OAByteString bs <- P.lift P.await
+		ss <- P.liftIO $ get $ sourceState s
+		b <- P.liftIO $ buff bs
+		P.liftIO $ queueBuffers s [b]
+		buffs <- ST.get
+		ST.put $ buffs ++ [b]
+		case ss of
+			Playing -> do
+				num <- P.liftIO $ get $ buffersProcessed s
+				newBuffs <- ST.get
+				let numOldBuffs = fromInteger $ toInteger $ num
+				P.liftIO $ freeMemory s (take numOldBuffs newBuffs)
+				ST.put $ drop numOldBuffs newBuffs
+			_ -> P.liftIO $ play [s]
 
---FIX ME!
-freeMemory :: Source -> IO ()
-freeMemory s = do
-	num <- get $ buffersProcessed s :: IO ALint
-	return ()
---	bs <- unqueueBuffers s []
---	mapM_ freeBuff bs
+freeMemory :: Source -> [Buffer] -> IO ()
+freeMemory s buffs = do
+	when (length buffs > 0) $ print $ "Freeing " ++ (show $ length buffs) ++ " buffers"
+	unqueueBuffers s buffs
+	mapM_ freeBuff buffs 
 	where 
 		freeBuff :: Buffer -> IO ()
 		freeBuff b =  do 
@@ -106,6 +109,6 @@ buff :: BS.ByteString -> IO Buffer
 buff bs = do
 	(ptr,len) <- BS.useAsCStringLen bs return
 	b <- liftM head $ genObjectNames 1 :: (IO Buffer)
-	let bd = BufferData (MemoryRegion ptr (fromIntegral $ len)) Mono16 16000
+	let bd = BufferData (MemoryRegion ptr (fromIntegral $ len)) Stereo16 44100
 	bufferData b $= bd
 	return b

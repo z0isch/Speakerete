@@ -60,13 +60,11 @@ syncTest t filename = do
 
 pulseTest :: IO ()
 pulseTest = do
-	system "pulseaudio --kill"
- 	C.forkOS $ system "pulseaudio" >> return ()
+--	system "pulseaudio --kill"
+--	C.forkOS $ system "pulseaudio -D" >> return ()
 	getALReady
 	s <- source
-	f <- openFile "test.wav" WriteMode
-	C.threadDelay 30000
-	runEffect $ fromPA >-> otherALFormat >-> alConsumer s
+	runEffect $ fromPA >-> alConsumer s
 
 
 countConsumer :: Consumer BS.ByteString IO ()
