@@ -24,9 +24,19 @@ import Sound.OpenAL
 import Control.Monad.State.Strict as S
 import Data.Attoparsec.ByteString.Lazy
 import Data.Binary
+import qualified Network.NTP.Control as NTP
+import qualified Network.NTP.Control.Packet as NTPP
+import Data.Time.Clock.POSIX
+import Data.Maybe
 
+getNTPTime :: String -> IO UTCTime
+getNTPTime hostname = do
+	t <- NTP.queryHost hostname $ NTPP.opVariables [NTPP.Clock]
+	v <- NTPP.readVariables t
+	return $ posixSecondsToUTCTime $ fromJust $ NTPP.clock v
+	
 timeTest = do
-	t <- getCurrentTime
+	t <- getNTPTime "localhost"
 	let f = "%F %X:%q"
 	let s = formatTime defaultTimeLocale f t
 	print $ encode s
