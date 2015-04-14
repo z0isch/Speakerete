@@ -54,7 +54,7 @@ waveDecoder b = do
 		(Left e) -> error (show e )
 		(Right w) -> yield w
   	
-getWavePacket :: Maybe (Either PA.ParsingError WavePacket) -> Producer'  WavePacket IO ()
+getWavePacket :: Maybe (Either PA.ParsingError WavePacket) -> Producer  WavePacket IO ()
 getWavePacket p = do
 	t <- liftIO $ getCurrentTime
 	yield $ e t p 

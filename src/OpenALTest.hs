@@ -76,7 +76,7 @@ alConsumer s = flip ST.evalStateT [] $ forever $ do
 freeMemory :: Source -> [Buffer] -> IO ()
 freeMemory s buffs = do
 	when (length buffs > 0) $ print $ "Freeing " ++ (show $ length buffs) ++ " buffers"
-	unqueueBuffers s buffs
+	unqueueBuffers s $ fromIntegral $ length buffs
 	mapM_ freeBuff buffs 
 	where 
 		freeBuff :: Buffer -> IO ()
