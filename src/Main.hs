@@ -18,8 +18,7 @@ import System.Locale
 import Data.Maybe
 import qualified Control.Concurrent         as C
 import           OpenALTest
---import Control.Concurrent.STM
---import Control.Concurrent.STM.TVar
+import Control.Concurrent.STM
 --import Sound.OpenAL
 import           Control.Monad.State.Strict as S
 --import Data.Attoparsec.ByteString.Lazy
@@ -44,12 +43,11 @@ syncPipe t = for cat (yield . WavePacket t)
 
 syncTest :: UTCTime -> String -> IO ()
 syncTest t filename = do
-    getALReady
-    alSource <- source
+    (alSource,buffs) <- getALReady
     f <- openFile filename ReadMode
-    runEffect $ PB.fromHandle f >-> syncPipe t >-> alFormatPipe >-> alConsumer alSource
     now <- getCurrentTime
     print $ "Waiting " ++ (show $ (timeDiff t now) `div` 1000000) ++ " seconds"
+    runEffect $ PB.fromHandle f >-> syncPipe t >-> alFormatPipe >-> alConsumer alSource buffs
     _ <- getLine
     return ()
 
@@ -57,10 +55,9 @@ pulseTest :: IO ()
 pulseTest = do
 --  system "pulseaudio --kill"
 --  C.forkOS $ system "pulseaudio -D" >> return ()
-    getALReady
-    s <- source
+    (s,buffs) <-getALReady
     t <- getCurrentTime
-    runEffect $ fromPA >-> for cat (\(OAByteString bs) -> yield $ OAWavePacket (WavePacket t bs)) >-> alConsumer s
+    runEffect $ fromPA >-> for cat (\(OAByteString bs) -> yield $ OAWavePacket (WavePacket t bs)) >-> alConsumer s buffs
 
 
 countConsumer :: Consumer BS.ByteString IO ()
