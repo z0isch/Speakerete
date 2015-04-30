@@ -34,7 +34,7 @@ data EncodedPacket = EncodedPacket [Socket] BSL.ByteString
 setupPackets :: TVar [Socket] -> Int -> Int -> Pipe BS.ByteString Packet IO ()
 setupPackets clientsTVar byteLimit seconds = do
     initialTime <- liftIO getCurrentTime
-    clients <- liftIO $ readTVarIO clientsTVar 
+    clients <- liftIO $ readTVarIO clientsTVar
     flip evalStateT (PacketState clients 0 initialTime) $ forever $ do
 	bs <- lift await
 	PacketState cs numBytes _ <- get
@@ -45,7 +45,7 @@ setupPackets clientsTVar byteLimit seconds = do
 	then do
             liftIO $ print "New Client!"
 	    newTime <- liftIO getCurrentTime
-	    put $ PacketState diffCs 0 newTime 
+	    put $ PacketState diffCs 0 newTime
 	    lift $ yield $ Packet diffCs $ WavePacket (addUTCTime (fromIntegral seconds) newTime) bs
 	else if newNum < byteLimit
 	then do
@@ -58,13 +58,13 @@ setupPackets clientsTVar byteLimit seconds = do
 	    put $ PacketState diffCs byteLimit newTime
 	    lift $ yield $ Packet diffCs $ WavePacket newTime bs
 
-toManySockets :: Consumer' EncodedPacket IO () 
-toManySockets = for cat (\(EncodedPacket socks bs) -> 
+toManySockets :: Consumer' EncodedPacket IO ()
+toManySockets = for cat (\(EncodedPacket socks bs) ->
     liftIO $ mapM_ (`PTCP.sendLazy` bs) socks)
 
 
 encodePacket :: Pipe Packet EncodedPacket IO ()
-encodePacket = for cat (\(Packet socks wp) -> 
+encodePacket = for cat (\(Packet socks wp) ->
     yield $ EncodedPacket socks (DB.encode wp))
 
 serverToClients :: Socket -> TVar [Socket] -> IO ()
@@ -73,7 +73,7 @@ serverToClients incomming tvar = runEffect $ PTCP.fromSocket incomming 4096 >-> 
 addClient :: TVar [Socket] -> IO ()
 addClient tvar = do
     (s,_) <- PTCP.bindSock (PTCP.Host "localhost") "11004"
-    listen s 4096 
+    listen s 4096
     forever $ do
         (cS,_) <- accept s
 	atomically $ modifyTVar tvar (\sockets -> sockets ++ [cS])
@@ -87,11 +87,10 @@ mainServer = do
 
 mainClient :: IO ()
 mainClient = do
-    getALReady
-    alSource <- source
-    PTCP.connect "localhost" "11004" (\(s,_) -> process alSource $ PTCP.fromSocket s 4096)
-    where 
-    process alSource p = do
+    (alSource,buffs) <-getALReady
+    PTCP.connect "localhost" "11004" (\(s,_) -> process alSource buffs $ PTCP.fromSocket s 4096)
+    where
+    process alSource buffs p = do
     	(result,rest) <- PP.runStateT (PA.parse parseWavePacket) p
-	runEffect $ getWavePacket result >-> alFormatPipe >-> alConsumer alSource
-        process alSource rest
+	runEffect $ getWavePacket result >-> alFormatPipe >-> alConsumer alSource buffs
+        process alSource buffs rest

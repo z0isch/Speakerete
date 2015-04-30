@@ -1,9 +1,9 @@
 import           Pipes
---import qualified Pipes.Prelude as P
+import qualified Pipes.Prelude as P
 import qualified Pipes.ByteString           as PB
 --import qualified Pipes.Network.TCP as PTCP
 --import qualified Pipes.Lift as PL
---import System.Process
+import System.Process
 --import System.Cmd
 import           System.IO
 --import Network.Socket
@@ -27,9 +27,11 @@ import System.Environment
 
 main :: IO ()
 main = do
-  (timeString:file:_) <- getArgs
-  let t = fromJust $ parseTime defaultTimeLocale "%F %X" timeString
-  syncTest t file
+  (t:_) <- getArgs
+  pulseTest (t == "True")
+  --(timeString:file:_) <- getArgs
+  --let t = fromJust $ parseTime defaultTimeLocale "%F %X" timeString
+  --syncTest t file
 
 op :: Consumer PB.ByteString IO ()
 op = flip evalStateT (0::Int) $ forever $ do
@@ -51,14 +53,19 @@ syncTest t filename = do
     _ <- getLine
     return ()
 
-pulseTest :: IO ()
-pulseTest = do
---  system "pulseaudio --kill"
---  C.forkOS $ system "pulseaudio -D" >> return ()
-    (s,buffs) <-getALReady
+pulseTest :: Bool -> IO ()
+pulseTest p = do
     t <- getCurrentTime
-    runEffect $ fromPA >-> for cat (\(OAByteString bs) -> yield $ OAWavePacket (WavePacket t bs)) >-> alConsumer s buffs
-
+    if p then play t else out t
+    void getLine
+    void $ system "pactl play-sample 0 null"
+    void getLine
+    where
+      pipe t = fromPA >-> for cat (\(OAByteString bs) -> yield $ OAWavePacket (WavePacket t bs))
+      play t = do
+        (s,buffs) <-getALReady
+        void $ C.forkIO $ runEffect $ pipe t >-> alConsumer s buffs
+      out t = void $ C.forkIO $ runEffect $ pipe t >-> P.print
 
 countConsumer :: Consumer BS.ByteString IO ()
 countConsumer = flip evalStateT 0 $ forever $ do

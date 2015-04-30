@@ -21,6 +21,7 @@ import Control.Concurrent.STM
 newtype OAByteString = OAByteString BS.ByteString
 newtype OggByteString = OggByteString BS.ByteString
 newtype OAWavePacket = OAWavePacket WavePacket
+                       deriving (Show)
 newtype OggWavePacket = OggWavePacket WavePacket
 
 data TestPacket a = TestPacket WavePacket
@@ -51,9 +52,8 @@ fromOgg = P.for P.cat (\(OggByteString bs) -> do
 
 fromPA :: P.Producer OAByteString IO ()
 fromPA = do
-    _ <- P.liftIO $ C.forkOS $ void $ system "pulseaudio"
-    P.liftIO $ C.threadDelay 30000
-    (i,o,_,_) <- P.liftIO $ runInteractiveCommand "parec --device=drain.monitor --format=s16le --rate=44100 --channels=2"
+    --_ <- P.liftIO $ C.forkOS $ void $ system "pulseaudio"
+    (i,o,_,_) <- P.liftIO $ runInteractiveCommand "parec --device=null.monitor --format=s16le --rate=44100 --channels=2"
     P.liftIO $ hClose i
     P.for (PB.fromHandle o) (P.yield . OAByteString)
 
@@ -104,7 +104,7 @@ freeMemoryLoop s buffTVar sec = do
 
 freeMemory :: Source -> [Buffer] -> IO ()
 freeMemory s buffs = do
-    unless (null buffs) $ print $ "Freeing " ++ show (length buffs) ++ " buffers"
+--    unless (null buffs) $ print $ "Freeing " ++ show (length buffs) ++ " buffers"
     _ <- unqueueBuffers s $ fromIntegral $ length buffs
     mapM_ freeBuff buffs
     where

@@ -30,8 +30,8 @@ instance DB.Binary WavePacket where
 	DB.put bs
     get = error ""
 
-parseWavePacket :: A.Parser WavePacket 
-parseWavePacket = do 
+parseWavePacket :: A.Parser WavePacket
+parseWavePacket = do
     time <- A.count 40 A.anyWord8
     l <- A.count 8 A.anyWord8
     bs <- A.count (fromIntegral (DB.decode $ BSL.pack l :: Int64)) A.anyWord8
@@ -46,12 +46,12 @@ waveDecoder b = do
     case wp of
 	(Left e) -> error (show e )
 	(Right w) -> yield w
-  	
+
 getWavePacket :: Maybe (Either PA.ParsingError WavePacket) -> Producer  WavePacket IO ()
 getWavePacket p = do
     t <- liftIO getCurrentTime
-    yield $ e t p 
-    where 
+    yield $ e t p
+    where
         e t Nothing = WavePacket t BS.empty
 	e _ (Just (Left pe)) = error $ "Can't get WavePakcet: " ++ PA.peMessage pe
 	e _ (Just (Right w))  = w
