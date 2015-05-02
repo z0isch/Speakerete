@@ -1,6 +1,6 @@
 module OpenALTest where
 
-import System.IO 
+import System.IO
 import System.Process
 import qualified Data.ByteString as BS
 import Foreign.Marshal.Alloc

@@ -24,24 +24,15 @@ import           Control.Monad.State.Strict as S
 --import Data.Attoparsec.ByteString.Lazy
 import           Data.Binary
 import System.Environment
+import Sound.OpenAL.ALC.Context
 
 main :: IO ()
 main = do
-  (t:_) <- getArgs
-  pulseTest (t == "True")
-  --(timeString:file:_) <- getArgs
-  --let t = fromJust $ parseTime defaultTimeLocale "%F %X" timeString
-  --syncTest t file
-
-op :: Consumer PB.ByteString IO ()
-op = flip evalStateT (0::Int) $ forever $ do
-    i <- S.get
-    bs <- lift await
-    liftIO $ BS.writeFile ("out"++show i++".bin") bs
-    S.put $ i+1
-
-syncPipe :: UTCTime -> Pipe PB.ByteString WavePacket IO ()
-syncPipe t = for cat (yield . WavePacket t)
+--  (t:_) <- getArgs
+ -- pulseTest (t == "True")
+  (timeString:file:_) <- getArgs
+  let t = fromJust $ parseTime defaultTimeLocale "%F %X" timeString
+  syncTest t file
 
 syncTest :: UTCTime -> String -> IO ()
 syncTest t filename = do
@@ -49,7 +40,7 @@ syncTest t filename = do
     f <- openFile filename ReadMode
     now <- getCurrentTime
     print $ "Waiting " ++ (show $ (timeDiff t now) `div` 1000000) ++ " seconds"
-    runEffect $ PB.fromHandle f >-> syncPipe t >-> alFormatPipe >-> alConsumer alSource buffs
+    runEffect $ PB.fromHandle f >-> for cat (\bs -> yield $ OAWavePacket (WavePacket t bs)) >-> alConsumer alSource buffs
     _ <- getLine
     return ()
 
@@ -66,11 +57,3 @@ pulseTest p = do
         (s,buffs) <-getALReady
         void $ C.forkIO $ runEffect $ pipe t >-> alConsumer s buffs
       out t = void $ C.forkIO $ runEffect $ pipe t >-> P.print
-
-countConsumer :: Consumer BS.ByteString IO ()
-countConsumer = flip evalStateT 0 $ forever $ do
-    bs <- lift await
-    count <- S.get
-    let newC = count + BS.length bs
-    liftIO $ print newC
-    S.put newC
