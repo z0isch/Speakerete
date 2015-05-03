@@ -19,15 +19,15 @@ import Data.Maybe
 import qualified Control.Concurrent         as C
 import           OpenALTest
 import Control.Concurrent.STM
---import Sound.OpenAL
 import           Control.Monad.State.Strict as S
 --import Data.Attoparsec.ByteString.Lazy
 import           Data.Binary
 import System.Environment
-import Sound.OpenAL.ALC.Context
-
+import Sound.OpenAL
 main :: IO ()
 main = do
+  d <- allDeviceSpecifiers
+  print d
 --  (t:_) <- getArgs
  -- pulseTest (t == "True")
   (timeString:file:_) <- getArgs

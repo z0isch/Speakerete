@@ -65,7 +65,7 @@ alFormatPipe =  P.for P.cat (\(WavePacket t bs) -> do
 getALReady :: IO (Source, TVar [Buffer])
 getALReady = do
   d <- device
-  _ <- context d
+  _ <- context d [Frequency 44100.0, Refresh 43.0, Sync False, MonoSources 0, StereoSources 1]
   alSource <- source
   buffs <- newTVarIO []
   C.forkIO $ freeMemoryLoop alSource buffs 1000000
@@ -120,9 +120,9 @@ device = do
     	Nothing -> error "openDevice failed"
 	Just d -> return d
 
-context :: Device -> IO Context
-context dev = do
-    ctx <- createContext dev []
+context :: Device -> [ContextAttribute]-> IO Context
+context dev attrs = do
+    ctx <- createContext dev attrs
     case ctx of
         Nothing -> error "no ctx"
 	Just c -> do
