@@ -13,3 +13,8 @@ Follow the guide here for compiling pusleaudio5 and bluez5 for the pi: [link](ht
 cabal --with-ghc=arm-unknown-linux-gnueabihf-ghc --with-ghc-pkg=arm-unknown-linux-gnueabihf-ghc-pkg --with-ld=arm-linux-gnueabihf-ld --with-strip=arm-linux-gnueabihf-strip install --only-dependencies
 ```
 * If cabal can't install the library try this: [link](http://stackoverflow.com/questions/25765893/how-do-i-install-dependencies-when-cross-compiling-haskell-code)
+
+*Had trouble installing pulse-simple library, try this:
+```
+./setup configure --with-ghc=arm-unknown-linux-gnueabihf-ghc --with-ghc-pkg=arm-unknown-linux-gnueabihf-ghc-pkg --with-ld=arm-linux-gnueabihf-ld --with-strip=arm-linux-gnueabihf-strip --hsc2hs-options=-x --extra-lib-dirs="/home/aj/raspberrypi/rootfs/usr/lib/arm-linux-gnueabihf/" --extra-include-dirs="/home/aj/raspberrypi/rootfs/usr/include/" --extra-include-dirs="/home/aj/raspberrypi/rootfs/usr/include/arm-linux-gnueabihf" --with-hsc2hs=arm-unknown-linux-gnueabihf-hsc2hs --with-gcc=arm-linux-gnueabihf-gcc
+```
