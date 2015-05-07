@@ -65,10 +65,12 @@ alFormatPipe =  P.for P.cat (\(WavePacket t bs) -> do
 getALReady :: IO (Source, TVar [Buffer])
 getALReady = do
   d <- device
-  _ <- context d [Frequency 44100.0, Refresh 43.0, Sync False, MonoSources 0, StereoSources 1]
+  _ <- context d []--[Frequency 44100.0, Refresh 43.0, Sync False, MonoSources 0, StereoSources 1]
   alSource <- source
   buffs <- newTVarIO []
   C.forkIO $ freeMemoryLoop alSource buffs 1000000
+  errors <- alcErrors d
+  print errors
   return (alSource, buffs)
 
 timeDiff :: UTCTime -> UTCTime -> Int

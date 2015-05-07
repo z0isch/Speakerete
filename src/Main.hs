@@ -1,38 +1,69 @@
 import           Pipes
-import qualified Pipes.Prelude as P
 import qualified Pipes.ByteString           as PB
+import qualified Pipes.Prelude              as P
 --import qualified Pipes.Network.TCP as PTCP
 --import qualified Pipes.Lift as PL
-import System.Process
+import           System.Process
 --import System.Cmd
 import           System.IO
 --import Network.Socket
 import qualified Data.ByteString            as BS
 import qualified Data.ByteString.Lazy       as BSL
+import           Data.ByteString.Unsafe
 --import GHC.Generics (Generic)
 import           WavePacket
 --import Server
-import           Data.Time.Clock
-import Data.Time.Format
-import System.Locale
-import Data.Maybe
 import qualified Control.Concurrent         as C
-import           OpenALTest
-import Control.Concurrent.STM
+import           Control.Concurrent.STM
 import           Control.Monad.State.Strict as S
+import           Data.Maybe
+import           Data.Time.Clock
+import           Data.Time.Format
+import           OpenALTest
+import           System.Locale
 --import Data.Attoparsec.ByteString.Lazy
 import           Data.Binary
-import System.Environment
-import Sound.OpenAL
+import           Foreign.Ptr
+import qualified PulseAudio                 as PA
+import           Sound.OpenAL
+import           Sound.Pulse.Simple
+import           System.Environment
+import           System.Posix.IO
+import           System.Posix.Types
+
 main :: IO ()
 main = do
-  d <- allDeviceSpecifiers
-  print d
---  (t:_) <- getArgs
- -- pulseTest (t == "True")
   (timeString:file:_) <- getArgs
   let t = fromJust $ parseTime defaultTimeLocale "%F %X" timeString
-  syncTest t file
+  pulseTest t file
+
+soxConsumer :: Handle -> Consumer OAWavePacket IO ()
+soxConsumer i = for cat (\(OAWavePacket (WavePacket _ bs)) -> do
+    liftIO $ BS.hPut i bs
+    liftIO $ hFlush i)
+
+soxTest :: String -> IO ()
+soxTest filename =  do
+  f <- openFile filename ReadMode
+  (i,_,_,_) <- runInteractiveCommand "play -t raw -c 2 -b 16 -L -e signed-integer -r 44100 -"
+  runEffect $ PB.fromHandle f >-> for cat (\bs -> do
+    liftIO $ BS.hPut i bs
+    liftIO $ hFlush i)
+
+toNamedPipe :: Fd -> Consumer OAWavePacket IO ()
+toNamedPipe fd = for cat (\(OAWavePacket (WavePacket t bs)) -> do
+  cstring <- liftIO $ unsafeUseAsCString bs return
+  curr <- liftIO getCurrentTime
+  liftIO $ C.threadDelay $ timeDiff t curr
+  liftIO $ void $ fdWriteBuf fd (castPtr cstring) (fromIntegral $ BS.length bs))
+
+paTest :: String -> IO ()
+paTest filename = do
+  f <- openFile filename ReadMode
+  (i,_,_,_) <- runInteractiveCommand "pacat -d 1"
+  runEffect $ PB.fromHandle f >-> for cat (\bs -> do
+    liftIO $ BS.hPut i bs
+    liftIO $ hFlush i)
 
 syncTest :: UTCTime -> String -> IO ()
 syncTest t filename = do
@@ -44,16 +75,18 @@ syncTest t filename = do
     _ <- getLine
     return ()
 
-pulseTest :: Bool -> IO ()
-pulseTest p = do
-    t <- getCurrentTime
-    if p then play t else out t
-    void getLine
-    void $ system "pactl play-sample 0 null"
+pulseTest :: UTCTime -> String-> IO ()
+pulseTest t filename = do
+    now <- getCurrentTime
+    print $ "Waiting " ++ (show $ (timeDiff t now) `div` 1000000) ++ " seconds"
+    f <- openFile filename ReadMode
+    s <- simpleNew Nothing "example" Play Nothing "this is an example application" (SampleSpec (S16 LittleEndian) 44100 2) Nothing Nothing
+    play t f s
     void getLine
     where
-      pipe t = fromPA >-> for cat (\(OAByteString bs) -> yield $ OAWavePacket (WavePacket t bs))
-      play t = do
-        (s,buffs) <-getALReady
-        void $ C.forkIO $ runEffect $ pipe t >-> alConsumer s buffs
-      out t = void $ C.forkIO $ runEffect $ pipe t >-> P.print
+      pipe t f = PB.fromHandle f >-> for cat (\bs -> yield $ OAWavePacket (WavePacket t bs))
+      play t f s = void $ C.forkIO $ runEffect $ pipe t f >-> for cat (\(OAWavePacket (WavePacket t bs)) -> do
+                              now <- liftIO getCurrentTime
+                              liftIO $ C.threadDelay (timeDiff t now)
+                              liftIO $ simpleWriteRaw s bs)
+      out t f = void $ C.forkIO $ runEffect $ pipe t f >-> P.print
