@@ -9,7 +9,7 @@ import           System.IO
 --import Network.Socket
 import qualified Data.ByteString            as BS
 import qualified Data.ByteString.Lazy       as BSL
-import           Data.ByteString.Unsafe
+import Data.ByteString.Unsafe
 --import GHC.Generics (Generic)
 import           WavePacket
 --import Server
@@ -23,13 +23,13 @@ import           OpenALTest
 import           System.Locale
 --import Data.Attoparsec.ByteString.Lazy
 import           Data.Binary
-import           Foreign.Ptr
 import qualified PulseAudio                 as PA
-import           Sound.OpenAL
-import           Sound.Pulse.Simple
-import           System.Environment
-import           System.Posix.IO
-import           System.Posix.Types
+import System.Environment
+import Sound.OpenAL
+import System.Posix.IO
+import System.Posix.Types
+import Foreign.Ptr
+import Sound.Pulse.Simple
 
 main :: IO ()
 main = do
